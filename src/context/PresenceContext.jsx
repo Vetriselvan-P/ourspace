@@ -10,12 +10,11 @@ const PresenceContext = createContext({});
  * @param {string} myUserId - Current authenticated user ID
  * @param {string|null} partnerUserId - Partner's user ID if resolved
  */
-function checkIsPartnerPresent(state, myUserId, partnerUserId) {
+function checkIsPartnerPresent(state, myUserId) {
   if (!state || typeof state !== 'object') return false;
 
   for (const [key, presences] of Object.entries(state)) {
-    const isTarget = partnerUserId ? key === partnerUserId : key !== myUserId;
-    if (isTarget && Array.isArray(presences) && presences.length > 0) {
+    if (key !== myUserId && Array.isArray(presences) && presences.length > 0) {
       return true;
     }
   }
@@ -47,7 +46,7 @@ export function PresenceProvider({ children }) {
 
       const syncPresence = () => {
         const state = channel.presenceState();
-        const online = checkIsPartnerPresent(state, user.id, partnerId);
+        const online = checkIsPartnerPresent(state, user.id);
         setIsPartnerOnline(online);
         if (!online && !lastSeen) {
           setLastSeen(new Date());
@@ -59,21 +58,18 @@ export function PresenceProvider({ children }) {
           syncPresence();
         })
         .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-          const isTarget = partnerId ? key === partnerId : key !== user.id;
-          if (isTarget && Array.isArray(newPresences) && newPresences.length > 0) {
+          if (key !== user.id && Array.isArray(newPresences) && newPresences.length > 0) {
             setIsPartnerOnline(true);
             setLastSeen(null);
           }
         })
         .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-          // Exclude leaving presences from the current state to prevent race conditions
           const state = channel.presenceState();
           const leftRefs = new Set((leftPresences || []).map(p => p.presence_ref));
 
           let partnerStillOnline = false;
           for (const [k, presences] of Object.entries(state)) {
-            const isTarget = partnerId ? key === partnerId : key !== user.id;
-            if (isTarget && Array.isArray(presences)) {
+            if (k !== user.id && Array.isArray(presences)) {
               const remaining = presences.filter(p => !leftRefs.has(p.presence_ref));
               if (remaining.length > 0) {
                 partnerStillOnline = true;

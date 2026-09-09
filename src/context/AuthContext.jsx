@@ -33,7 +33,50 @@ export function AuthProvider({ children }) {
 
   // Initialize Auth state
   useEffect(() => {
-    // Check localStorage for demo session first
+    if (isConfigured && supabase) {
+      // Live Supabase is configured: check real Supabase session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        if (session?.user) {
+          // If we have a real user session, clear any old demo session
+          localStorage.removeItem('ourspace_demo_user');
+          setIsDemo(false);
+          handleUserSetup(session.user);
+        } else {
+          // Check if user explicitly chose demo mode while logged out
+          const savedDemoUserKey = localStorage.getItem('ourspace_demo_user');
+          if (savedDemoUserKey && DEMO_USERS[savedDemoUserKey]) {
+            const demoUser = DEMO_USERS[savedDemoUserKey];
+            setUser(demoUser);
+            setIsDemo(true);
+            setPartnerProfile({
+              display_name: demoUser.partnerName,
+              avatar_emoji: demoUser.partnerAvatar,
+              email: demoUser.partnerEmail
+            });
+          } else {
+            setUser(null);
+          }
+          setLoading(false);
+        }
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+        if (session?.user) {
+          localStorage.removeItem('ourspace_demo_user');
+          setIsDemo(false);
+          handleUserSetup(session.user);
+        } else {
+          setUser(null);
+          setLoading(false);
+        }
+      });
+
+      return () => subscription.unsubscribe();
+    }
+
+    // If Supabase is NOT configured at all, fallback to demo mode
     const savedDemoUserKey = localStorage.getItem('ourspace_demo_user');
     if (savedDemoUserKey && DEMO_USERS[savedDemoUserKey]) {
       const demoUser = DEMO_USERS[savedDemoUserKey];
@@ -44,37 +87,8 @@ export function AuthProvider({ children }) {
         avatar_emoji: demoUser.partnerAvatar,
         email: demoUser.partnerEmail
       });
-      setLoading(false);
-      return;
     }
-
-    if (!isConfigured || !supabase) {
-      setLoading(false);
-      return;
-    }
-
-    // Live Supabase session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-        handleUserSetup(session.user);
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        handleUserSetup(session.user);
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    setLoading(false);
   }, []);
 
   async function handleUserSetup(authUser) {
