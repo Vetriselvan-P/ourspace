@@ -156,6 +156,18 @@ export function AuthProvider({ children }) {
       return;
     }
     if (supabase) {
+      try {
+        // Explicitly untrack presence and unsubscribe channels before closing auth session
+        const channels = supabase.getChannels ? supabase.getChannels() : [];
+        for (const ch of channels) {
+          try {
+            await ch.untrack();
+            await supabase.removeChannel(ch);
+          } catch (e) {}
+        }
+      } catch (err) {
+        console.warn('Channel cleanup on sign out:', err);
+      }
       await supabase.auth.signOut();
     }
     setUser(null);
